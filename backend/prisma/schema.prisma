@@ -1,0 +1,240 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  ORGANIZER
+  PARTICIPANT
+}
+
+enum EventStatus {
+  DRAFT
+  PUBLISHED
+  FINISHED
+  CANCELLED
+}
+
+enum TicketType {
+  STANDARD
+  VIP
+  EARLY_BIRD
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  STRIPE
+  PAYPAL
+  WAVE
+  ORANGE_MONEY
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+model User {
+  id            String    @id @default(uuid())
+  firstName     String
+  lastName      String
+  email          String?   @unique
+  password      String
+  role          Role      @default(PARTICIPANT)
+  avatarUrl     String?
+  phone          String?   @unique
+  isVerified    Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  events        Event[]        @relation("OrganizerEvents")
+  orders        Order[]
+  attendees     Attendee[]
+  reviews       Review[]
+  notifications Notification[]
+  phoneVerified      Boolean   @default(false)
+  phoneOtp            String?
+  phoneOtpExpiresAt   DateTime?
+  trustedOrganizer    Boolean   @default(false)
+  reports             Report[]
+  waitlistEntries WaitlistEntry[]
+  @@map("users")
+}
+
+model Category {
+  id     String  @id @default(uuid())
+  name   String  @unique
+  slug   String  @unique
+  events Event[]
+
+  @@map("categories")
+}
+
+model Event {
+  id            String      @id @default(uuid())
+  title         String
+  slug          String      @unique
+  description   String
+  imageUrl      String?
+  location      String
+  city          String
+  startDate     DateTime
+  endDate       DateTime
+  capacity      Int
+  status        EventStatus @default(DRAFT)
+  isFree        Boolean     @default(false)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  organizerId   String
+  organizer     User        @relation("OrganizerEvents", fields: [organizerId], references: [id])
+
+  categoryId    String
+  category      Category    @relation(fields: [categoryId], references: [id])
+
+  tickets       Ticket[]
+  orders        Order[]
+  attendees     Attendee[]
+  reviews       Review[]
+  moderationStatus String   @default("PENDING")
+  reportsCount     Int      @default(0)
+  reports          Report[]
+  waitlistEntries WaitlistEntry[]
+  @@map("events")
+}
+
+model Ticket {
+  id           String     @id @default(uuid())
+  eventId      String
+  event        Event      @relation(fields: [eventId], references: [id])
+  type         TicketType @default(STANDARD)
+  name         String
+  price        Decimal    @default(0)
+  quantity     Int
+  quantitySold Int        @default(0)
+  createdAt    DateTime   @default(now())
+
+  orderItems   OrderItem[]
+
+  @@map("tickets")
+}
+
+model Order {
+  id           String      @id @default(uuid())
+  userId       String
+  user         User        @relation(fields: [userId], references: [id])
+  eventId      String
+  event        Event       @relation(fields: [eventId], references: [id])
+  status       OrderStatus @default(PENDING)
+  totalAmount  Decimal     @default(0)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  items        OrderItem[]
+  payment      Payment?
+  attendees    Attendee[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id         String  @id @default(uuid())
+  orderId    String
+  order      Order   @relation(fields: [orderId], references: [id])
+  ticketId   String
+  ticket     Ticket  @relation(fields: [ticketId], references: [id])
+  quantity   Int
+  unitPrice  Decimal
+
+  @@map("order_items")
+}
+
+model Payment {
+  id            String        @id @default(uuid())
+  orderId       String        @unique
+  order         Order         @relation(fields: [orderId], references: [id])
+  method        PaymentMethod
+  status        PaymentStatus @default(PENDING)
+  amount        Decimal
+  transactionId String?
+  createdAt     DateTime      @default(now())
+
+  @@map("payments")
+}
+
+model Attendee {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  eventId    String
+  event      Event    @relation(fields: [eventId], references: [id])
+  orderId    String
+  order      Order    @relation(fields: [orderId], references: [id])
+  qrCode     String   @unique
+  checkedIn  Boolean  @default(false)
+  checkedInAt DateTime?
+  createdAt  DateTime @default(now())
+
+  @@map("attendees")
+}
+
+model Review {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id])
+  rating    Int
+  comment   String?
+  createdAt DateTime @default(now())
+
+  @@map("reviews")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@map("notifications")
+}
+model Report {
+  id        String   @id @default(uuid())
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  reason    String
+  createdAt DateTime @default(now())
+
+  @@map("reports")
+}
+model WaitlistEntry {
+  id        String   @id @default(uuid())
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notified  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@unique([eventId, userId])
+  @@map("waitlist_entries")
+}
